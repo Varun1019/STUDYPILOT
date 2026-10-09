@@ -1,0 +1,247 @@
+@import "tailwindcss";
+
+@layer base {
+  body {
+    font-family: 'Space Mono', ui-monospace, monospace;
+    background-color: #f4f1ea;
+    background-image: 
+      linear-gradient(rgba(10, 10, 10, 0.06) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(10, 10, 10, 0.06) 1px, transparent 1px);
+    background-size: 24px 24px;
+    color: #0a0a0a;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1, h2, h3, h4, .font-display {
+    font-family: 'Archivo Black', impact, sans-serif;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+  }
+
+  a {
+    text-decoration: underline;
+  }
+}
+
+/* ==========================================================================
+   NEO-BRUTALIST DESIGN SYSTEM & SHADOWS
+   ========================================================================== */
+
+.neo-box {
+  background-color: #ffffff;
+  border: 2.5px solid #0a0a0a;
+  border-radius: 0px;
+  box-shadow: 6px 6px 0px #0a0a0a;
+  transition: transform 120ms cubic-bezier(0.16, 1, 0.3, 1), box-shadow 120ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.neo-box:hover {
+  transform: translate(2px, 2px);
+  box-shadow: 4px 4px 0px #0a0a0a;
+}
+
+.neo-box-accent {
+  background-color: #ff2d2d;
+  color: #ffffff;
+  border: 2.5px solid #0a0a0a;
+  border-radius: 0px;
+  box-shadow: 6px 6px 0px #0a0a0a;
+}
+
+.neo-btn {
+  background-color: #ffffff;
+  color: #0a0a0a;
+  border: 2px solid #0a0a0a;
+  border-radius: 0px;
+  box-shadow: 4px 4px 0px #0a0a0a;
+  font-family: 'Archivo Black', sans-serif;
+  text-transform: uppercase;
+  font-size: 0.75rem;
+  padding: 0.5rem 1rem;
+  transition: transform 100ms ease, box-shadow 100ms ease, background-color 100ms ease, color 100ms ease;
+  cursor: pointer;
+  user-select: none;
+}
+
+.neo-btn:hover {
+  background-color: #facc15;
+  transform: translate(1.5px, 1.5px);
+  box-shadow: 2.5px 2.5px 0px #0a0a0a;
+}
+
+.neo-btn:active {
+  transform: translate(3.5px, 3.5px);
+  box-shadow: 0.5px 0.5px 0px #0a0a0a;
+}
+
+.neo-btn-accent {
+  background-color: #ff2d2d;
+  color: #ffffff;
+  border: 2.5px solid #0a0a0a;
+  border-radius: 0px;
+  box-shadow: 5px 5px 0px #0a0a0a;
+  font-family: 'Archivo Black', sans-serif;
+  text-transform: uppercase;
+  font-size: 0.85rem;
+  padding: 0.75rem 1.5rem;
+  transition: transform 100ms ease, box-shadow 100ms ease, background-color 100ms ease, color 100ms ease;
+  cursor: pointer;
+  user-select: none;
+}
+
+.neo-btn-accent:hover {
+  background-color: #0a0a0a;
+  color: #ffffff;
+  transform: translate(2px, 2px);
+  box-shadow: 3px 3px 0px #0a0a0a;
+}
+
+.neo-btn-accent:active {
+  transform: translate(4px, 4px);
+  box-shadow: 1px 1px 0px #0a0a0a;
+}
+
+/* ==========================================================================
+   ANIMATIONS & KEYFRAMES (150–300MS EASE-OUT 60FPS)
+   ========================================================================== */
+
+@keyframes brutalFadeSlideUp {
+  0% {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes tabSwitchSlideIn {
+  0% {
+    opacity: 0;
+    transform: translateY(8px) scale(0.995);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes tabSlideIndicator {
+  0% { transform: scaleX(0.9); }
+  100% { transform: scaleX(1); }
+}
+
+@keyframes brutalPop {
+  0% { transform: scale(0.97); }
+  60% { transform: scale(1.02); }
+  100% { transform: scale(1); }
+}
+
+@keyframes brutalShake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-4px); }
+  75% { transform: translateX(4px); }
+}
+
+@keyframes brutalPulseBar {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.animate-brutal-in {
+  animation: brutalFadeSlideUp 200ms ease-out forwards;
+}
+
+.animate-tab-switch {
+  animation: tabSwitchSlideIn 220ms ease-out forwards;
+}
+
+.animate-tab-indicator {
+  animation: tabSlideIndicator 180ms ease-out forwards;
+}
+
+.animate-brutal-pop {
+  animation: brutalPop 200ms ease-out forwards;
+}
+
+.animate-brutal-shake {
+  animation: brutalShake 240ms ease-out forwards;
+}
+
+.animate-pulse-fast {
+  animation: brutalPulseBar 1s ease-out infinite;
+}
+
+/* Stagger delay classes */
+.delay-1 { animation-delay: 50ms; }
+.delay-2 { animation-delay: 100ms; }
+.delay-3 { animation-delay: 150ms; }
+.delay-4 { animation-delay: 200ms; }
+
+/* 3D Flip Card Animation */
+.perspective-1000 {
+  perspective: 1000px;
+}
+
+.flip-card-inner {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transition: transform 340ms cubic-bezier(0.16, 1, 0.3, 1);
+  transform-style: preserve-3d;
+}
+
+.flip-card-inner.is-flipped {
+  transform: rotateY(180deg);
+}
+
+.flip-card-front,
+.flip-card-back {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+}
+
+.flip-card-back {
+  transform: rotateY(180deg);
+}
+
+/* Hard scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f4f1ea;
+  border-left: 2px solid #0a0a0a;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #0a0a0a;
+}
+
+/* Print view styling */
+@media print {
+  body {
+    background: white !important;
+    color: black !important;
+  }
+  .no-print {
+    display: none !important;
+  }
+}
+
+/* Respect prefers-reduced-motion */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

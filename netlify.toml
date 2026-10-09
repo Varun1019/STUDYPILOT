@@ -1,0 +1,21 @@
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+[functions]
+  directory = "api"
+
+[[redirects]]
+  from = "/api/ai"
+  to = "/api/ai"
+  status = 200
+
+[[redirects]]
+  from = "/api/status"
+  to = "/api/status"
+  status = 200
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
