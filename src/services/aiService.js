@@ -56,7 +56,12 @@ export const aiService = {
         })
       });
 
-      const data = await res.json();
+      let data = {};
+      try {
+        data = await res.json();
+      } catch (parseErr) {
+        throw new Error(`Server returned an invalid response format (HTTP ${res.status}). Please try again.`);
+      }
       if (res.ok && data.success && Array.isArray(data.questions) && data.questions.length > 0) {
         const questions = data.questions.map((q, idx) => ({
           ...q,

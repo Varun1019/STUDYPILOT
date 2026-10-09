@@ -70,7 +70,7 @@ function getRequestBody(req) {
 /**
  * Call Server LLM using configured fast model tier
  */
-async function callServerLLM(systemPrompt, userPrompt, jsonMode = true, maxTokens = 1200) {
+async function callServerLLM(systemPrompt, userPrompt, jsonMode = true, maxTokens = 4096) {
   loadEnvFile();
   const apiKey = (process.env.AI_API_KEY || process.env.GEMINI_API_KEY)?.trim();
   const openAiKey = process.env.OPENAI_API_KEY?.trim();
@@ -257,18 +257,187 @@ async function streamServerLLM(systemPrompt, userPrompt, res) {
 }
 
 /**
- * Safe JSON parser with single automatic retry
+ * Intelligently repairs truncated or slightly malformed JSON
+ */
+function repairTruncatedJson(rawText) {
+  if (!rawText || typeof rawText !== 'string') return null;
+
+  // 1. Strip markdown fences and whitespace
+  let text = rawText
+    .replace(/^```json\s*/i, '')
+    .replace(/^```\s*/i, '')
+    .replace(/```\s*$/i, '')
+    .trim();
+
+  // 2. Find start of JSON structure
+  const firstBrace = text.indexOf('{');
+  const firstBracket = text.indexOf('[');
+  if (firstBrace === -1 && firstBracket === -1) return null;
+
+  let startIdx = 0;
+  if (firstBrace !== -1 && (firstBracket === -1 || firstBrace < firstBracket)) {
+    startIdx = firstBrace;
+  } else if (firstBracket !== -1) {
+    startIdx = firstBracket;
+  }
+  text = text.slice(startIdx);
+
+  // 3. Fast path: Direct parse
+  try {
+    return JSON.parse(text);
+  } catch (e) {
+    // Needs repair
+  }
+
+  // 4. Structural bracket & string balancing
+  try {
+    let inString = false;
+    let isEscaped = false;
+    let repaired = '';
+    const stack = [];
+
+    for (let i = 0; i < text.length; i++) {
+      const char = text[i];
+      if (isEscaped) {
+        isEscaped = false;
+        repaired += char;
+        continue;
+      }
+      if (char === '\\') {
+        isEscaped = true;
+        repaired += char;
+        continue;
+      }
+      if (char === '"') {
+        inString = !inString;
+        repaired += char;
+        continue;
+      }
+
+      if (!inString) {
+        if (char === '{' || char === '[') {
+          stack.push(char);
+          repaired += char;
+        } else if (char === '}') {
+          if (stack.length > 0 && stack[stack.length - 1] === '{') {
+            stack.pop();
+            repaired += char;
+          }
+        } else if (char === ']') {
+          if (stack.length > 0 && stack[stack.length - 1] === '[') {
+            stack.pop();
+            repaired += char;
+          }
+        } else {
+          repaired += char;
+        }
+      } else {
+        repaired += char;
+      }
+    }
+
+    // If truncated inside a string literal, close the quote
+    if (inString) {
+      repaired += '"';
+    }
+
+    // Clean up dangling trailing keys, colons, or commas
+    repaired = repaired.replace(/:\s*$/, ': null');
+    repaired = repaired.replace(/,\s*$/, '');
+    repaired = repaired.replace(/,\s*"[^"]*"\s*:\s*null$/, '');
+
+    // Close all open brackets & braces in reverse order
+    const closeStack = [];
+    let inStr2 = false;
+    let isEsc2 = false;
+    for (let i = 0; i < repaired.length; i++) {
+      const c = repaired[i];
+      if (isEsc2) { isEsc2 = false; continue; }
+      if (c === '\\') { isEsc2 = true; continue; }
+      if (c === '"') { inStr2 = !inStr2; continue; }
+      if (!inStr2) {
+        if (c === '{' || c === '[') closeStack.push(c);
+        else if (c === '}' && closeStack[closeStack.length - 1] === '{') closeStack.pop();
+        else if (c === ']' && closeStack[closeStack.length - 1] === '[') closeStack.pop();
+      }
+    }
+
+    let closed = repaired;
+    while (closeStack.length > 0) {
+      const open = closeStack.pop();
+      closed += open === '{' ? '}' : ']';
+    }
+
+    try {
+      const parsed = JSON.parse(closed);
+      if (parsed) return parsed;
+    } catch {}
+  } catch {}
+
+  // 5. Fallback: Salvage all complete objects (questions/cards)
+  try {
+    const objectMatches = [];
+    let depth = 0;
+    let objStart = -1;
+    let inS = false;
+    let isEsc = false;
+
+    for (let i = 0; i < text.length; i++) {
+      const c = text[i];
+      if (isEsc) { isEsc = false; continue; }
+      if (c === '\\') { isEsc = true; continue; }
+      if (c === '"') { inS = !inS; continue; }
+      if (!inS) {
+        if (c === '{') {
+          if (depth === 1 || depth === 0) objStart = i;
+          depth++;
+        } else if (c === '}') {
+          depth--;
+          if (depth >= 0 && objStart !== -1) {
+            const candidate = text.slice(objStart, i + 1);
+            try {
+              const parsedObj = JSON.parse(candidate);
+              if (parsedObj && (parsedObj.stem || parsedObj.front || parsedObj.options)) {
+                objectMatches.push(parsedObj);
+              }
+            } catch {}
+            objStart = -1;
+          }
+        }
+      }
+    }
+
+    if (objectMatches.length > 0) {
+      return { questions: objectMatches, cards: objectMatches };
+    }
+  } catch {}
+
+  return null;
+}
+
+/**
+ * Safe JSON parser with auto-repair and single automatic retry
  */
 async function parseJsonWithRetry(rawText, systemPrompt, userPrompt) {
+  // 1. Try immediate repair/parse
+  const repaired = repairTruncatedJson(rawText);
+  if (repaired) return repaired;
+
+  // 2. Retry with LLM if unrecoverable
   try {
-    const cleaned = rawText.replace(/```json\n?|```/g, '').trim();
-    return JSON.parse(cleaned);
-  } catch {
-    const fixPrompt = `You returned invalid JSON. Please fix it and return ONLY valid, raw JSON.\n\nInvalid Output was:\n${rawText.slice(0, 500)}`;
-    const retryText = await callServerLLM(systemPrompt, fixPrompt, true, 1200);
-    const cleanedRetry = retryText.replace(/```json\n?|```/g, '').trim();
-    return JSON.parse(cleanedRetry);
+    const fixPrompt = `Fix this invalid JSON and return ONLY valid, clean JSON with all questions and options intact:\n\n${rawText.slice(0, 3000)}`;
+    const retryText = await callServerLLM(systemPrompt, fixPrompt, true, 3500);
+    const retryRepaired = repairTruncatedJson(retryText);
+    if (retryRepaired) return retryRepaired;
+  } catch (err) {
+    console.warn('[StudyPilot Server] JSON retry LLM call failed:', err.message);
   }
+
+  // 3. Final attempt: salvage any array or object fragments
+  const fallback = repairTruncatedJson(rawText);
+  if (fallback) return fallback;
+
+  throw new Error('AI returned an incomplete response. Please retry with fewer questions or check connection.');
 }
 
 /**
@@ -361,16 +530,17 @@ Explain clearly and concisely in under 200 words.`;
         const count = Math.max(3, Math.min(10, Number(body.count) || 5));
         const topicName = typeof body.topic === 'object' ? body.topic.name : (body.topic || 'Core Concepts');
         const difficulty = body.difficulty || 'Medium';
+        const maxQuizTokens = Math.max(3000, count * 450);
 
         const systemPrompt = `Create exactly ${count} multiple choice questions for ${subject} - topic "${topicName}". Difficulty: ${difficulty}.
-Respond strictly with compact JSON:
+CRITICAL: Keep each explanation concise (1-2 sentences maximum). Return strictly compact, valid JSON:
 {
   "questions": [
     {
       "stem": "Question text?",
-      "options": ["A", "B", "C", "D"],
+      "options": ["Option A", "Option B", "Option C", "Option D"],
       "correctAnswer": 0,
-      "explanation": "Concise 1-sentence explanation.",
+      "explanation": "Concise 1-2 sentence explanation.",
       "topic": "${topicName}",
       "difficulty": "${difficulty}"
     }
@@ -378,9 +548,9 @@ Respond strictly with compact JSON:
 }`;
 
         const userPrompt = `Generate ${count} ${difficulty} MCQs on "${topicName}".`;
-        const rawText = await callServerLLM(systemPrompt, userPrompt, true, 1200);
+        const rawText = await callServerLLM(systemPrompt, userPrompt, true, maxQuizTokens);
         const parsed = await parseJsonWithRetry(rawText, systemPrompt, userPrompt);
-        const qList = parsed.questions || parsed;
+        const qList = parsed?.questions || (Array.isArray(parsed) ? parsed : []);
 
         const sanitized = (Array.isArray(qList) ? qList : []).slice(0, count).map((q, idx) => ({
           id: `q-${Date.now()}-${idx}`,
@@ -427,6 +597,7 @@ Keep it structured, under 400 words.`;
         const count = Math.max(5, Math.min(25, Number(body.count) || 15));
         const topicName = body.topic || 'Core Notes';
         const textContent = (body.text || '').slice(0, 12000);
+        const maxCardTokens = Math.max(2500, count * 180);
 
         const systemPrompt = `Create exactly ${count} active-recall study flashcards for ${subject}.
 Respond strictly with valid JSON:
@@ -441,12 +612,13 @@ Respond strictly with valid JSON:
 }`;
 
         const userPrompt = `Generate ${count} flashcards from this text:\n\n${textContent}`;
-        const rawText = await callServerLLM(systemPrompt, userPrompt, true, 1400);
+        const rawText = await callServerLLM(systemPrompt, userPrompt, true, maxCardTokens);
         const parsed = await parseJsonWithRetry(rawText, systemPrompt, userPrompt);
-        const cards = (parsed.cards || parsed).map((c, i) => ({
+        const rawCards = parsed?.cards || (Array.isArray(parsed) ? parsed : []);
+        const cards = (Array.isArray(rawCards) ? rawCards : []).map((c, i) => ({
           id: `card-${Date.now()}-${i}`,
-          front: c.front,
-          back: c.back,
+          front: c.front || 'Concept',
+          back: c.back || 'Definition',
           topic: c.topic || topicName,
           concept: c.concept || topicName,
           mastered: false,
